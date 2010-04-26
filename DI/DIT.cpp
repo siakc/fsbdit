@@ -233,7 +233,7 @@ int main(int argc, char* argv[])
 	}
 
 	std::cout << "\nCopyright 2010 under GPL 3 License. To get a copy of the license\ngo to http://www.gnu.org/licenses\n\nThis program will try to detect data corruption in transfer\nfrom CPU to Main Memory and back.\n";
-	
+	std::cout << "Use /pc:n switch where n is the number of memory pages to becommited in the test." << std::endl;
 	unsigned int pageCount = 1024;
 	for(int i=0; i <argc;++i) { //Ignoring any command line arguments other than "/pc"
 		if(!_strnicmp(argv[i], "/pc:", 4)){
