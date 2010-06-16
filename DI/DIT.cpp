@@ -142,7 +142,7 @@ SIZE_T Initialize(const int pageCount)
 	
 
 	std::cout << std::endl;
-	std::cout << "Commit size will be " << memSize /1024 << " KB."<<std::endl;
+	std::cout << "Commit size will be " << (memSize /1024) * 4 << " KB."<<std::endl;
 
 	return memSize;
 }
