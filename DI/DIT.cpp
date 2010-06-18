@@ -23,6 +23,9 @@ enum TestErr {SUCCESSFUL, MEM_NOT_COMMITED};
 typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
 //HANDLE hCon;
 unsigned int errCount=0;
+unsigned short strTestProgress;
+unsigned short long64TestProgress;
+bool bReportThreadExit = false;
 bool GetFileVersion()
 {
 	DWORD  versioninfo_size;
@@ -82,7 +85,7 @@ BOOL IsWow64()
     return bIsWow64;
 }
 
-SIZE_T Initialize(const int pageCount)
+DWORDLONG Initialize(int pageCount)
 {
 	std::cout << "\nSystem Information:\n";
 	std::cout << "Is this program compiled in 64 bit mode: ";
@@ -98,11 +101,33 @@ SIZE_T Initialize(const int pageCount)
 	
 	SYSTEM_INFO si;
 	GetSystemInfo(&si);
-	
-	SIZE_T memSize = pageCount * si.dwPageSize;
+	MEMORYSTATUSEX sMemoryStatus;	
+	sMemoryStatus.dwLength = sizeof(MEMORYSTATUSEX);
+	GlobalMemoryStatusEx(&sMemoryStatus);
+	DWORDLONG memSize;
 
+	std::cout << std::endl;
+	if(pageCount < 1) //Auto max mem finder
+	{
+		pageCount = sMemoryStatus.ullAvailPhys / si.dwPageSize / 4;
+		memSize = sMemoryStatus.ullAvailPhys / 4;
+		std::cout << "Auto calculated number of pages: " << pageCount << std::endl;
+		
+	}else 
+	{
+		memSize = pageCount * si.dwPageSize;
+		std::cout << "Number of pages: " << pageCount << std::endl;
+	}
+	
+	
+	std::cout << "Total Physical Memory (MB): " << sMemoryStatus.ullTotalPhys / (1024*1024)<< std::endl;
+	std::cout << "Available Physical Memory (MB): " << sMemoryStatus.ullAvailPhys / (1024*1024)<< std::endl;
+	std::cout << "Percentage of In Use Physical Memory: " << sMemoryStatus.dwMemoryLoad << std::endl;
+	std::cout << "Total Commitable Memory (MB): " << sMemoryStatus.ullTotalPageFile/ (1024*1024)<< std::endl;
+	std::cout << "Available Commitable Memory (MB): " << sMemoryStatus.ullAvailPageFile/ (1024*1024)<< std::endl;
 	std::cout << "Page size is " << si.dwPageSize << " bytes."<<std::endl;
-	std::cout << "Allocation granularity is: " << si.dwAllocationGranularity << std::endl;
+	std::cout << "Allocation Granularity: " << si.dwAllocationGranularity << std::endl;
+	std::cout << std::endl;
 	std::cout << "Processor Architecture is: ";
 	switch(si.wProcessorArchitecture){
 		case PROCESSOR_ARCHITECTURE_AMD64:
@@ -147,9 +172,35 @@ SIZE_T Initialize(const int pageCount)
 	return memSize;
 }
 
+DWORD WINAPI ReportProgress(LPVOID pMemSize)
+{
+	DWORDLONG memSize= *((DWORDLONG*) pMemSize);
+	std::cout << "String Test Progress %:\nInteger Test Progress %:"; 
+	CONSOLE_SCREEN_BUFFER_INFO sBufInfo;
+	DWORD nWritten;
+	char strProgressPercent[6];
+	HANDLE hConsoleOut = GetStdHandle(STD_OUTPUT_HANDLE);
+	GetConsoleScreenBufferInfo(hConsoleOut, &sBufInfo);
+	COORD posWrite = sBufInfo.dwCursorPosition;
+	++posWrite.X;
+	while(!bReportThreadExit)
+	{
+		--posWrite.Y;
+		--posWrite.X;
+		_itoa((strTestProgress*100/USHRT_MAX), strProgressPercent, 10);
+		WriteConsoleOutputCharacter(hConsoleOut, strProgressPercent, strlen(strProgressPercent), posWrite, &nWritten); 
+		++posWrite.Y;
+		++posWrite.X;
+		_itoa((long64TestProgress*100/USHRT_MAX), strProgressPercent, 10);
+		WriteConsoleOutputCharacter(hConsoleOut, strProgressPercent, strlen(strProgressPercent), posWrite, &nWritten); 
+		Sleep(memSize/10);
+	}
+
+	return 0;
+}
 DWORD WINAPI Long64Test(LPVOID pMemSize)
 {
-	SIZE_T memSize = *((SIZE_T*) pMemSize);
+	DWORDLONG memSize = *((DWORDLONG*) pMemSize);
 	
 	long long *ptr64[2] = {NULL ,NULL};
 
@@ -165,7 +216,9 @@ DWORD WINAPI Long64Test(LPVOID pMemSize)
 
 	SIZE_T pos;
 	
-	for(unsigned short iter = 0; iter < USHRT_MAX; ++iter){
+	for(unsigned short iter = 0; iter < USHRT_MAX; ++iter)
+	{
+		long64TestProgress = iter;
 		restartloop:
 		for(pos = 0; pos < SIZE; ++pos) 
 			ptr64[0][pos]= pos; 
@@ -193,7 +246,7 @@ DWORD WINAPI Long64Test(LPVOID pMemSize)
 
 DWORD WINAPI StrTest(LPVOID pMemSize)
 {
-	SIZE_T memSize= *((SIZE_T*) pMemSize);
+	DWORDLONG memSize= *((DWORDLONG*) pMemSize);
 	char str[100];
 	str[0] = '\0';
 
@@ -207,12 +260,14 @@ DWORD WINAPI StrTest(LPVOID pMemSize)
 		return 1;
 	}
 
-	for(unsigned short iter = 0; iter < USHRT_MAX; ++iter){
-		memcpy(ptrStr[1], ptrStr[0], memSize);
+	for(unsigned short iter = 0; iter < USHRT_MAX; ++iter)
+	{
+		strTestProgress = iter;
+		CopyMemory(ptrStr[1], ptrStr[0], memSize);
 
 		errCount += abs(memcmp(ptrStr[0], ptrStr[1], memSize));
 
-		memcpy(ptrStr[0], ptrStr[1], memSize);
+		CopyMemory(ptrStr[0], ptrStr[1], memSize);
 
 		errCount += abs(memcmp(ptrStr[0], ptrStr[1], memSize));
 	}
@@ -233,7 +288,7 @@ int main(int argc, char* argv[])
 	}
 
 	std::cout << "\nCopyright 2010 under GPL 3 License. To get a copy of the license\ngo to http://www.gnu.org/licenses\n\nThis program will try to detect data corruption in transfer\nfrom CPU to Main Memory and back.\n";
-	std::cout << "Use /pc:n switch where n is the number of memory pages to becommited in the test." << std::endl;
+	std::cout << "Use /pc:n switch where n is the number of memory pages to be commited\nin the test." << std::endl;
 	unsigned int pageCount = 1024;
 	for(int i=0; i <argc;++i) { //Ignoring any command line arguments other than "/pc"
 		if(!_strnicmp(argv[i], "/pc:", 4)){
@@ -243,27 +298,27 @@ int main(int argc, char* argv[])
 	}
 
 	std::cout << std::endl;
-	if(pageCount < 1) {
-		std::cout << "No valid page count specified, using default " << pageCount << " pages."<< std::endl;
-	}else std::cout << "Number of pages: " << pageCount << std::endl;
 
-	SIZE_T memSize = Initialize(pageCount);
-	if(!SetProcessWorkingSetSize(GetCurrentProcess(), memSize*3, memSize*3))
+
+	DWORDLONG memSize = Initialize(pageCount);
+	if(!SetProcessWorkingSetSize(GetCurrentProcess(), memSize*3, memSize*4))
 		std::cerr << "Unable to set working size, using windows default.\n";
 
-	if(!SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL))
+	if(!SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS))
 		std::cerr << "Unable to set priority below normal. Using normal.\n";
 	else if(pageCount>100) 
 		std::cout << "WARNING: This test may take several hours. You can work with other\nprograms while the test is running." << std::endl; 
 	
 	HANDLE hThread[2]; 
-
-	std::cout << "Test Started..." ;
-	hThread[0] = CreateThread(NULL,0,StrTest, &memSize,0 , NULL);
-	hThread[1] = CreateThread(NULL,0,Long64Test, &memSize,0 , NULL);
 	
-	WaitForMultipleObjects(2, hThread, TRUE, INFINITE);
+	std::cout << "Test Started...\n" ;
+	hThread[0] = CreateThread(NULL, 0, StrTest, &memSize, 0, NULL);
+	hThread[1] = CreateThread(NULL, 0, Long64Test, &memSize, 0, NULL);
+	HANDLE hReportThread = CreateThread(NULL, 0, ReportProgress, &memSize, 0, NULL);
 
+	WaitForMultipleObjects(2, hThread, TRUE, INFINITE);
+	bReportThreadExit = true;
+	std::cout << std::endl; 
 	DWORD dwStrTestExitCode, dwULong64TestExitCode;
 	if(!GetExitCodeThread(hThread[0], &dwStrTestExitCode)) {
 		std::cerr << "GetExitCodeThread failed." << std::endl;
