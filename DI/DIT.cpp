@@ -208,12 +208,12 @@ DWORD WINAPI Long64Test(LPVOID pMemSize)
 {
 	DWORDLONG memSize = *((DWORDLONG*) pMemSize);
 	
-	long long *ptr64[2] = {NULL ,NULL};
+	unsigned long long *ptr64[2] = {NULL ,NULL};
 
 	const SIZE_T SIZE = memSize/sizeof(long long);
 	try{
-		ptr64[0] = new long long [SIZE];
-		ptr64[1] = new long long [SIZE];
+		ptr64[0] = new unsigned long long [SIZE];
+		ptr64[1] = new unsigned long long [SIZE];
 	}catch(std::bad_alloc exBadAlloc){
 		std::cerr << "Memory allocation failed in integer test probably due not enough memory." << std::endl;
 		if(ptr64[0] != NULL) delete[] ptr64[0];
