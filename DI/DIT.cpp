@@ -17,14 +17,20 @@
 // DI.cpp : Defines the entry point for the console application.
 //
 
-#include "stdafx.h"
 #include <process.h>
+#include <iostream>
+#define WINDOWS_LEAN_AND_MEAN
+#include <windows.h>
+
+
 enum TestErr {SUCCESSFUL, MEM_NOT_COMMITED};
 typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
 //HANDLE hCon;
 unsigned int errCount=0;
 unsigned short strTestProgress;
 unsigned short long64TestProgress;
+unsigned short ITERATION_DENOMINATOR = 100;
+unsigned short nITERATIONS;
 bool bReportThreadExit = false;
 bool GetFileVersion()
 {
@@ -187,13 +193,13 @@ DWORD WINAPI ReportProgress(LPVOID pMemSize)
 	{
 		--posWrite.Y;
 		--posWrite.X;
-		_itoa((strTestProgress*100/USHRT_MAX), strProgressPercent, 10);
+		_itoa((strTestProgress*100/(nITERATIONS)), strProgressPercent, 10);
 		WriteConsoleOutputCharacter(hConsoleOut, strProgressPercent, strlen(strProgressPercent), posWrite, &nWritten); 
 		++posWrite.Y;
 		++posWrite.X;
-		_itoa((long64TestProgress*100/USHRT_MAX), strProgressPercent, 10);
+		_itoa((long64TestProgress*100/(nITERATIONS)), strProgressPercent, 10);
 		WriteConsoleOutputCharacter(hConsoleOut, strProgressPercent, strlen(strProgressPercent), posWrite, &nWritten); 
-		Sleep(memSize/10);
+		Sleep(memSize/ITERATION_DENOMINATOR/50);
 	}
 
 	return 0;
@@ -216,7 +222,7 @@ DWORD WINAPI Long64Test(LPVOID pMemSize)
 
 	SIZE_T pos;
 	
-	for(unsigned short iter = 0; iter < USHRT_MAX; ++iter)
+	for(unsigned short iter = 0; iter < (nITERATIONS); ++iter)
 	{
 		long64TestProgress = iter;
 		restartloop:
@@ -260,7 +266,7 @@ DWORD WINAPI StrTest(LPVOID pMemSize)
 		return 1;
 	}
 
-	for(unsigned short iter = 0; iter < USHRT_MAX; ++iter)
+	for(unsigned short iter = 0; iter < (nITERATIONS); ++iter)
 	{
 		strTestProgress = iter;
 		CopyMemory(ptrStr[1], ptrStr[0], memSize);
@@ -288,18 +294,58 @@ int main(int argc, char* argv[])
 	}
 
 	std::cout << "\nCopyright 2010 under GPL 3 License. To get a copy of the license\ngo to http://www.gnu.org/licenses\n\nThis program will try to detect data corruption in transfer\nfrom CPU to Main Memory and back.\n";
-	std::cout << "Use /pc:n switch where n is the number of memory pages to be commited\nin the test." << std::endl;
+	std::cout << "Use /pc:n switch where n is the number of memory pages to be commited\nin the test.\n" ;
+	std::cout << "Use /td:l switch where l is the level of iteration from 1 to 4.\n1 will result is fastest and 4 in slowest test. Default is 2.\n" << std::endl;
 	unsigned int pageCount = 1024;
-	for(int i=0; i <argc;++i) { //Ignoring any command line arguments other than "/pc"
-		if(!_strnicmp(argv[i], "/pc:", 4)){
-			pageCount = atoi(&argv[i][4]);
-			break;
+	bool bTdSwitch = false;
+	bool bPcSwitch = false;
+	for(int i=0; i <argc;++i)
+	{
+		if(!_strnicmp(argv[i], "/pc:", 4))//Page Count
+		{
+			if(!bPcSwitch)
+			{
+				pageCount = atoi(&argv[i][4]);
+				bPcSwitch = true;
+			}
+			else
+				std::cout << "Switch /pc is used more than once, ignoring.\n";
+		}else if (!_strnicmp(argv[i], "/td:", 4)) //Iteration Depth
+		{
+			if(!bTdSwitch)
+			{
+				switch(atoi(&argv[i][4]))
+				{
+				case 1:
+					ITERATION_DENOMINATOR = 1000;
+					std::cout << "Test Level: 1\n";
+					break;
+				case 2:
+					ITERATION_DENOMINATOR = 100;
+					std::cout << "Test Level: 2\n";
+					break;
+				case 3:
+					ITERATION_DENOMINATOR = 10;
+					std::cout << "Test Level: 3\n";
+					break;
+				case 4:
+					ITERATION_DENOMINATOR = 1;
+					std::cout << "Test Level: 4\n";
+					break;
+				default:
+					std::cout << "Error: Invalid Parameter.\n";
+					return 0;
+				}
+				bTdSwitch = true;
+			}
+			else
+				std::cout << "Switch /td is used more than once, ignoring.\n";
 		}
 	}
-
+	
 	std::cout << std::endl;
-
-
+	
+	nITERATIONS = USHRT_MAX / ITERATION_DENOMINATOR;
 	DWORDLONG memSize = Initialize(pageCount);
 	if(!SetProcessWorkingSetSize(GetCurrentProcess(), memSize*3, memSize*4))
 		std::cerr << "Unable to set working size, using windows default.\n";
