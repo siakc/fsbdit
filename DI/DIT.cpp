@@ -26,11 +26,11 @@
 enum TestErr {SUCCESSFUL, MEM_NOT_COMMITED};
 typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
 //HANDLE hCon;
-unsigned int errCount=0;
+unsigned int intErrCount=0, strErrCount=0;
 unsigned short strTestProgress;
 unsigned short long64TestProgress;
 unsigned short ITERATION_DENOMINATOR = 100;
-unsigned short nITERATIONS;
+unsigned int nITERATIONS;
 bool bReportThreadExit = false;
 bool GetFileVersion()
 {
@@ -233,7 +233,7 @@ DWORD WINAPI Long64Test(LPVOID pMemSize)
 			ptr64[1][SIZE - pos] = ptr64[0][pos-1];
 		
 		for(pos = 0; pos < SIZE; ++pos)
-			if(ptr64[0][pos] + ptr64[1][pos] != SIZE - 1) {++errCount; iter++; goto restartloop;}
+			if(ptr64[0][pos] + ptr64[1][pos] != SIZE - 1) {++intErrCount; iter++; goto restartloop;}
 		
 		memcpy(ptr64[0], ptr64[1], memSize);
 
@@ -241,7 +241,7 @@ DWORD WINAPI Long64Test(LPVOID pMemSize)
 			ptr64[1][pos]= pos; 
 			
 		for(pos = 0; pos < SIZE; ++pos) 
-			if(ptr64[0][pos] + ptr64[1][pos] != SIZE - 1) {++errCount; break;}
+			if(ptr64[0][pos] + ptr64[1][pos] != SIZE - 1) {++intErrCount; break;}
 	}
 
 
@@ -271,11 +271,11 @@ DWORD WINAPI StrTest(LPVOID pMemSize)
 		strTestProgress = iter;
 		CopyMemory(ptrStr[1], ptrStr[0], memSize);
 
-		errCount += abs(memcmp(ptrStr[0], ptrStr[1], memSize));
+		strErrCount += abs(memcmp(ptrStr[0], ptrStr[1], memSize));
 
 		CopyMemory(ptrStr[0], ptrStr[1], memSize);
 
-		errCount += abs(memcmp(ptrStr[0], ptrStr[1], memSize));
+		strErrCount += abs(memcmp(ptrStr[0], ptrStr[1], memSize));
 	}
 	
 	delete[] ptrStr[0];
@@ -317,11 +317,11 @@ int main(int argc, char* argv[])
 				switch(atoi(&argv[i][4]))
 				{
 				case 1:
-					ITERATION_DENOMINATOR = 1000;
+					ITERATION_DENOMINATOR = 10000;
 					std::cout << "Test Level: 1\n";
 					break;
 				case 2:
-					ITERATION_DENOMINATOR = 100;
+					ITERATION_DENOMINATOR = 1000;
 					std::cout << "Test Level: 2\n";
 					break;
 				case 3:
@@ -345,14 +345,14 @@ int main(int argc, char* argv[])
 	
 	std::cout << std::endl;
 	
-	nITERATIONS = USHRT_MAX / ITERATION_DENOMINATOR;
+	nITERATIONS = UINT_MAX / ITERATION_DENOMINATOR;
 	DWORDLONG memSize = Initialize(pageCount);
 	if(!SetProcessWorkingSetSize(GetCurrentProcess(), memSize*3, memSize*4))
 		std::cerr << "Unable to set working size, using windows default.\n";
 
 	if(!SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS))
 		std::cerr << "Unable to set priority below normal. Using normal.\n";
-	else if(pageCount>100) 
+	else if(pageCount>1000 && ITERATION_DENOMINATOR<100) 
 		std::cout << "WARNING: This test may take several hours. You can work with other\nprograms while the test is running." << std::endl; 
 	
 	HANDLE hThread[2]; 
@@ -381,7 +381,7 @@ int main(int argc, char* argv[])
 	}
 
 	if(!dwStrTestExitCode ||!dwULong64TestExitCode)
-		std::cout <<"Done with " << errCount<<" errors."<<std::endl;
+		std::cout <<"Done with " << strErrCount <<"errors in string test and" << intErrCount <<" errors in integr test errors."<<std::endl;
 	else return 1;
 
 
