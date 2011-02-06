@@ -381,7 +381,7 @@ int main(int argc, char* argv[])
 	}
 
 	if(!dwStrTestExitCode ||!dwULong64TestExitCode)
-		std::cout <<"Done with " << strErrCount <<"errors in string test and" << intErrCount <<" errors in integr test errors."<<std::endl;
+		std::cout <<"Done with " << strErrCount << " errors in string test and " << intErrCount << " errors in integr test errors." << std::endl;
 	else return 1;
 
 
