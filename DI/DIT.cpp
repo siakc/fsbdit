@@ -26,11 +26,12 @@
 enum TestErr {SUCCESSFUL, MEM_NOT_COMMITED};
 typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
 //HANDLE hCon;
+typedef unsigned int ITER_TYPE;
 unsigned int intErrCount=0, strErrCount=0;
-unsigned short strTestProgress;
-unsigned short long64TestProgress;
+ITER_TYPE strTestProgress;
+ITER_TYPE long64TestProgress;
 unsigned short ITERATION_DENOMINATOR = 100;
-unsigned int nITERATIONS;
+ITER_TYPE nITERATIONS;
 bool bReportThreadExit = false;
 bool GetFileVersion()
 {
@@ -93,18 +94,18 @@ BOOL IsWow64()
 
 DWORDLONG Initialize(int pageCount)
 {
-	std::cout << "\nSystem Information:\n";
-	std::cout << "Is this program compiled in 64 bit mode: ";
+	
+	std::cout << "This is a x64 executable: ";
 #if defined _WIN64
 	std::cout << "Yes" <<std::endl;
 #else
 	std::cout << "No" <<std::endl;
-	std::cout << "Is this WOW64 process: ";
+	std::cout << "This is a WOW64 process: ";
 	if(IsWow64()) std::cout <<"Yes";
 	else std::cout<< "No";
 	std::cout << std::endl;
 #endif
-	
+	std::cout << "\nSystem Information:\n";
 	SYSTEM_INFO si;
 	GetSystemInfo(&si);
 	MEMORYSTATUSEX sMemoryStatus;	
@@ -117,24 +118,24 @@ DWORDLONG Initialize(int pageCount)
 	{
 		pageCount = sMemoryStatus.ullAvailPhys / si.dwPageSize / 4;
 		memSize = sMemoryStatus.ullAvailPhys / 4;
-		std::cout << "Auto calculated number of pages: " << pageCount << std::endl;
+		std::cout << "Auto Calculated Number Of Pages: " << pageCount << std::endl;
 		
 	}else 
 	{
 		memSize = pageCount * si.dwPageSize;
-		std::cout << "Number of pages: " << pageCount << std::endl;
+		std::cout << "Number Of Memory Pages For Test: " << pageCount << std::endl;
 	}
 	
 	
 	std::cout << "Total Physical Memory (MB): " << sMemoryStatus.ullTotalPhys / (1024*1024)<< std::endl;
 	std::cout << "Available Physical Memory (MB): " << sMemoryStatus.ullAvailPhys / (1024*1024)<< std::endl;
-	std::cout << "Percentage of In Use Physical Memory: " << sMemoryStatus.dwMemoryLoad << std::endl;
+	std::cout << "Physical Memory In Use %: " << sMemoryStatus.dwMemoryLoad << std::endl;
 	std::cout << "Total Commitable Memory (MB): " << sMemoryStatus.ullTotalPageFile/ (1024*1024)<< std::endl;
 	std::cout << "Available Commitable Memory (MB): " << sMemoryStatus.ullAvailPageFile/ (1024*1024)<< std::endl;
-	std::cout << "Page size is " << si.dwPageSize << " bytes."<<std::endl;
+	std::cout << "Page Size (Bytes): " << si.dwPageSize << std::endl;
 	std::cout << "Allocation Granularity: " << si.dwAllocationGranularity << std::endl;
 	std::cout << std::endl;
-	std::cout << "Processor Architecture is: ";
+	std::cout << "Processor Architecture: ";
 	switch(si.wProcessorArchitecture){
 		case PROCESSOR_ARCHITECTURE_AMD64:
 			std::cout << "x64";
@@ -215,14 +216,14 @@ DWORD WINAPI Long64Test(LPVOID pMemSize)
 		ptr64[0] = new unsigned long long [SIZE];
 		ptr64[1] = new unsigned long long [SIZE];
 	}catch(std::bad_alloc exBadAlloc){
-		std::cerr << "Memory allocation failed in integer test probably due not enough memory." << std::endl;
+		std::cerr << "Memory allocation failed in integer test probably due to not enough memory." << std::endl;
 		if(ptr64[0] != NULL) delete[] ptr64[0];
 		return 1;
 	}
 
 	SIZE_T pos;
 	
-	for(unsigned short iter = 0; iter < (nITERATIONS); ++iter)
+	for(ITER_TYPE iter = 0; iter < (nITERATIONS); ++iter)
 	{
 		long64TestProgress = iter;
 		restartloop:
@@ -266,7 +267,7 @@ DWORD WINAPI StrTest(LPVOID pMemSize)
 		return 1;
 	}
 
-	for(unsigned short iter = 0; iter < (nITERATIONS); ++iter)
+	for(ITER_TYPE iter = 0; iter < (nITERATIONS); ++iter)
 	{
 		strTestProgress = iter;
 		CopyMemory(ptrStr[1], ptrStr[0], memSize);
@@ -293,9 +294,9 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	std::cout << "\nCopyright 2010 under GPL 3 License. To get a copy of the license\ngo to http://www.gnu.org/licenses\n\nThis program will try to detect data corruption in transfer\nfrom CPU to Main Memory and back.\n";
+	std::cout << "\nCopyright 2010 under GPL 3 License. To get a copy of the license\ngo to http://www.gnu.org/licenses\n\nThis program will try to detect data corruption in transfer\nbetween CPU and Main Memory.\n";
 	std::cout << "Use /pc:n switch where n is the number of memory pages to be commited\nin the test.\n" ;
-	std::cout << "Use /td:l switch where l is the level of iteration from 1 to 4.\n1 will result is fastest and 4 in slowest test. Default is 2.\n" << std::endl;
+	std::cout << "Use /td:l switch where l is the level of iteration from 1 to 4.\n1 will result in fastest and 4 in slowest but deepest test. Default is 2.\n" << std::endl;
 	unsigned int pageCount = 1024;
 	bool bTdSwitch = false;
 	bool bPcSwitch = false;
@@ -380,8 +381,8 @@ int main(int argc, char* argv[])
 		std::cerr << "\nInteger test failed to start\n";
 	}
 
-	if(!dwStrTestExitCode ||!dwULong64TestExitCode)
-		std::cout <<"Done with " << strErrCount << " errors in string test and " << intErrCount << " errors in integr test errors." << std::endl;
+	if(!dwStrTestExitCode || !dwULong64TestExitCode)
+		std::cout <<"Done with " << strErrCount << " errors in string test and " << intErrCount << " errors in integer test." << std::endl;
 	else return 1;
 
 
