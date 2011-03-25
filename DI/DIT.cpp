@@ -19,6 +19,8 @@
 
 #include <process.h>
 #include <iostream>
+#include <algorithm>
+#include <vector>
 #define WINDOWS_LEAN_AND_MEAN
 #include <windows.h>
 
@@ -33,6 +35,10 @@ ITER_TYPE long64TestProgress;
 unsigned short ITERATION_DENOMINATOR = 100;
 ITER_TYPE nITERATIONS;
 bool bReportThreadExit = false;
+
+DWORD nWritten;
+CONSOLE_SCREEN_BUFFER_INFO sBufInfo;
+HANDLE hConsoleOut = GetStdHandle(STD_OUTPUT_HANDLE);
 bool GetFileVersion()
 {
 	DWORD  versioninfo_size;
@@ -92,7 +98,7 @@ BOOL IsWow64()
     return bIsWow64;
 }
 
-DWORDLONG Initialize(int pageCount)
+DWORDLONG Initialize(DWORDLONG pageCount)
 {
 	
 	std::cout << "This is a x64 executable: ";
@@ -179,14 +185,12 @@ DWORDLONG Initialize(int pageCount)
 	return memSize;
 }
 
-DWORD WINAPI ReportProgress(LPVOID pMemSize)
+DWORD WINAPI ReportProgress(LPVOID pUpdateInterval)
 {
-	DWORDLONG memSize= *((DWORDLONG*) pMemSize);
+	DWORDLONG updateInterval= *((DWORDLONG*) pUpdateInterval);
 	std::cout << "String Test Progress %:\nInteger Test Progress %:"; 
-	CONSOLE_SCREEN_BUFFER_INFO sBufInfo;
-	DWORD nWritten;
+
 	char strProgressPercent[6];
-	HANDLE hConsoleOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	GetConsoleScreenBufferInfo(hConsoleOut, &sBufInfo);
 	COORD posWrite = sBufInfo.dwCursorPosition;
 	++posWrite.X;
@@ -194,13 +198,13 @@ DWORD WINAPI ReportProgress(LPVOID pMemSize)
 	{
 		--posWrite.Y;
 		--posWrite.X;
-		_itoa((strTestProgress*100/(nITERATIONS)), strProgressPercent, 10);
+		_itoa(strTestProgress/(double)nITERATIONS*100, strProgressPercent, 10);
 		WriteConsoleOutputCharacter(hConsoleOut, strProgressPercent, strlen(strProgressPercent), posWrite, &nWritten); 
 		++posWrite.Y;
 		++posWrite.X;
-		_itoa((long64TestProgress*100/(nITERATIONS)), strProgressPercent, 10);
+		_itoa(long64TestProgress/(double)nITERATIONS*100, strProgressPercent, 10);
 		WriteConsoleOutputCharacter(hConsoleOut, strProgressPercent, strlen(strProgressPercent), posWrite, &nWritten); 
-		Sleep(memSize/ITERATION_DENOMINATOR/50);
+		Sleep(updateInterval ); ///100: ticks->ratio
 	}
 
 	return 0;
@@ -284,19 +288,39 @@ DWORD WINAPI StrTest(LPVOID pMemSize)
 
 	return 0;
 }
+int MeasureSystemSpeed()
+{
+	GetConsoleScreenBufferInfo(hConsoleOut, &sBufInfo);
+	char str[7];
+	COORD posWrite = sBufInfo.dwCursorPosition;
+	std::vector<int> tTime;
+	for(int testNumber=0 ; testNumber<5;++testNumber)
+	{
+		DWORD tStartTime = GetTickCount();
+		for(int i = 0; i<100000; ++i)
+		{
+			_itoa(i, str, 10);
+			WriteConsoleOutputCharacter(hConsoleOut, str, strlen(str), posWrite, &nWritten); 
+		}
+		tTime.push_back(GetTickCount() - tStartTime);
+	}
+	std::sort(tTime.begin(),tTime.end());
+	SetConsoleCursorPosition(hConsoleOut, sBufInfo.dwCursorPosition);
+	return tTime[2]; //Middle number
+}
 
 int main(int argc, char* argv[])
 {
 	std::cout << "FSB Data Integrity Tester by SiavoshKC. V";
 	if(!GetFileVersion())
 	{
-		std::cerr << "Getting file version failed.\n";
+		std::cerr << "Getting file version has failed.\n";
 		return 1;
 	}
 
 	std::cout << "\nCopyright 2010 under GPL 3 License. To get a copy of the license\ngo to http://www.gnu.org/licenses\n\nThis program will try to detect data corruption in transfer\nbetween CPU and Main Memory.\n";
 	std::cout << "Use /pc:n switch where n is the number of memory pages to be commited\nin the test.\n" ;
-	std::cout << "Use /td:l switch where l is the level of iteration from 1 to 4.\n1 will result in fastest and 4 in slowest but deepest test. Default is 2.\n" << std::endl;
+	std::cout << "Use /td:l switch where l is the level of iteration from 1 to 5.\n1 will result in fastest and 5 in slowest but deepest test. Default is 2.\n" << std::endl;
 	unsigned int pageCount = 1024;
 	bool bTdSwitch = false;
 	bool bPcSwitch = false;
@@ -319,19 +343,23 @@ int main(int argc, char* argv[])
 				{
 				case 1:
 					ITERATION_DENOMINATOR = 10000;
-					std::cout << "Test Level: 1\n";
+					std::cout << "Test Depth: 1\n";
 					break;
 				case 2:
 					ITERATION_DENOMINATOR = 1000;
-					std::cout << "Test Level: 2\n";
+					std::cout << "Test Depth: 2\n";
 					break;
 				case 3:
-					ITERATION_DENOMINATOR = 10;
-					std::cout << "Test Level: 3\n";
+					ITERATION_DENOMINATOR = 100;
+					std::cout << "Test Depth: 3\n";
 					break;
 				case 4:
+					ITERATION_DENOMINATOR = 10;
+					std::cout << "Test Depth: 4\n";
+					break;
+				case 5:
 					ITERATION_DENOMINATOR = 1;
-					std::cout << "Test Level: 4\n";
+					std::cout << "Test Depth: 5\n";
 					break;
 				default:
 					std::cout << "Error: Invalid Parameter.\n";
@@ -349,19 +377,26 @@ int main(int argc, char* argv[])
 	nITERATIONS = UINT_MAX / ITERATION_DENOMINATOR;
 	DWORDLONG memSize = Initialize(pageCount);
 	if(!SetProcessWorkingSetSize(GetCurrentProcess(), memSize*3, memSize*4))
-		std::cerr << "Unable to set working size, using windows default.\n";
+		std::cerr << "Unable to set working size. Using windows default instead.\n";
+
+	std::cout << "Assessing system speed...";
+	int testResult = MeasureSystemSpeed();
+	std::cout << "Test routine took about " <<testResult <<" milliseconds."<< std::endl;
+
+	int updateInterval = memSize / ITERATION_DENOMINATOR * testResult / 100 * 4;
+	std::cout << "Progress update interval is " << updateInterval << " milliseconds.\n";
 
 	if(!SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS))
-		std::cerr << "Unable to set priority below normal. Using normal.\n";
+		std::cerr << "Unable to set priority below normal. Using normal instead. This will significantly slow down your system while test is running.\n";
 	else if(pageCount>1000 && ITERATION_DENOMINATOR<100) 
-		std::cout << "WARNING: This test may take several hours. You can work with other\nprograms while the test is running." << std::endl; 
+		std::cout << "WARNING: This test may take several hours depending on parameters. You can work with other\nprograms while the test is running." << std::endl; 
 	
 	HANDLE hThread[2]; 
 	
 	std::cout << "Test Started...\n" ;
 	hThread[0] = CreateThread(NULL, 0, StrTest, &memSize, 0, NULL);
 	hThread[1] = CreateThread(NULL, 0, Long64Test, &memSize, 0, NULL);
-	HANDLE hReportThread = CreateThread(NULL, 0, ReportProgress, &memSize, 0, NULL);
+	HANDLE hReportThread = CreateThread(NULL, 0, ReportProgress, &updateInterval, 0, NULL);
 
 	WaitForMultipleObjects(2, hThread, TRUE, INFINITE);
 	bReportThreadExit = true;
@@ -382,10 +417,17 @@ int main(int argc, char* argv[])
 	}
 
 	if(!dwStrTestExitCode || !dwULong64TestExitCode)
-		std::cout <<"Done with " << strErrCount << " errors in string test and " << intErrCount << " errors in integer test." << std::endl;
+	{
+		if(strErrCount == 0 && intErrCount == 0)
+			SetConsoleTextAttribute(hConsoleOut, FOREGROUND_GREEN|FOREGROUND_INTENSITY);
+		else
+			SetConsoleTextAttribute(hConsoleOut, FOREGROUND_RED|FOREGROUND_INTENSITY);
+		
+		std::cout <<"Done with " << strErrCount << " errors in string and " << intErrCount << " errors in integer tests." << std::endl;
+	}
 	else return 1;
 
-
+	SetConsoleTextAttribute(hConsoleOut, FOREGROUND_GREEN|FOREGROUND_BLUE| FOREGROUND_RED);
 	return 0;
 }
 
