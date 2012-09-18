@@ -24,7 +24,7 @@
 #define WINDOWS_LEAN_AND_MEAN
 #include <windows.h>
 
-
+const int SPEED_TESTER_ALLOCATION_SIZE = 8*1024*1024; //In bytes
 enum TestErr {SUCCESSFUL, MEM_NOT_COMMITED};
 typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
 //HANDLE hCon;
@@ -32,7 +32,7 @@ typedef unsigned int ITER_TYPE;
 unsigned int intErrCount=0, strErrCount=0;
 ITER_TYPE strTestProgress;
 ITER_TYPE long64TestProgress;
-unsigned short ITERATION_DENOMINATOR = 100;
+unsigned short ITERATION_DENOMINATOR = 1000;
 ITER_TYPE nITERATIONS;
 bool bReportThreadExit = false;
 
@@ -188,22 +188,29 @@ DWORDLONG Initialize(DWORDLONG pageCount)
 DWORD WINAPI ReportProgress(LPVOID pUpdateInterval)
 {
 	DWORDLONG updateInterval= *((DWORDLONG*) pUpdateInterval);
-	std::cout << "String Test Progress %:\nInteger Test Progress %:"; 
+	std::cout << "String Test Progress %:\nInteger Test Progress %:\nErrors:"; 
 
-	char strProgressPercent[6];
+	char str[6];
 	GetConsoleScreenBufferInfo(hConsoleOut, &sBufInfo);
 	COORD posWrite = sBufInfo.dwCursorPosition;
-	++posWrite.X;
+	posWrite.X+=18;
+	--posWrite.Y;
 	while(!bReportThreadExit)
 	{
 		--posWrite.Y;
 		--posWrite.X;
-		_itoa(strTestProgress/(double)nITERATIONS*100, strProgressPercent, 10);
-		WriteConsoleOutputCharacter(hConsoleOut, strProgressPercent, strlen(strProgressPercent), posWrite, &nWritten); 
+		_itoa(strTestProgress/(double)nITERATIONS*100, str, 10);
+		WriteConsoleOutputCharacter(hConsoleOut, str, strlen(str), posWrite, &nWritten); 
 		++posWrite.Y;
 		++posWrite.X;
-		_itoa(long64TestProgress/(double)nITERATIONS*100, strProgressPercent, 10);
-		WriteConsoleOutputCharacter(hConsoleOut, strProgressPercent, strlen(strProgressPercent), posWrite, &nWritten); 
+		_itoa(long64TestProgress/(double)nITERATIONS*100, str, 10);
+		WriteConsoleOutputCharacter(hConsoleOut, str, strlen(str), posWrite, &nWritten); 
+		posWrite.X-=17;
+		posWrite.Y+=1;
+		_itoa(intErrCount+strErrCount, str, 10);
+		WriteConsoleOutputCharacter(hConsoleOut, str, strlen(str), posWrite, &nWritten);
+		posWrite.X+=17;
+		posWrite.Y-=1;
 		Sleep(updateInterval ); ///100: ticks->ratio
 	}
 
@@ -288,22 +295,35 @@ DWORD WINAPI StrTest(LPVOID pMemSize)
 
 	return 0;
 }
+
+volatile int dummy;
 int MeasureSystemSpeed()
 {
 	GetConsoleScreenBufferInfo(hConsoleOut, &sBufInfo);
-	char str[7];
 	COORD posWrite = sBufInfo.dwCursorPosition;
 	std::vector<int> tTime;
+	int *iTest = new int[SPEED_TESTER_ALLOCATION_SIZE/sizeof(int)]; //We have allocation size so we devide it by int size to see how many ints we need
 	for(int testNumber=0 ; testNumber<5;++testNumber)
 	{
 		DWORD tStartTime = GetTickCount();
-		for(int i = 0; i<100000; ++i)
+		
+		for(int j = 0; j < 300; ++j)
 		{
-			_itoa(i, str, 10);
-			WriteConsoleOutputCharacter(hConsoleOut, str, strlen(str), posWrite, &nWritten); 
+			dummy--;
+			int i = 0;
+			for( ;i<SPEED_TESTER_ALLOCATION_SIZE/sizeof(int); ++i)
+			{
+				iTest[i] = (i+dummy*j)%4000000000 + 1; 
+			}
+			for(; i>=0; --i)
+			{
+				if(i%2 == 0) dummy = iTest[i] + dummy;
+				else dummy = iTest[i-1] + dummy;
+			}
 		}
 		tTime.push_back(GetTickCount() - tStartTime);
 	}
+	delete[] iTest;
 	std::sort(tTime.begin(),tTime.end());
 	SetConsoleCursorPosition(hConsoleOut, sBufInfo.dwCursorPosition);
 	return tTime[2]; //Middle number
