@@ -17,12 +17,18 @@
 // DI.cpp : Defines the entry point for the console application.
 //
 
-#include <process.h>
+
 #include <iostream>
 #include <algorithm>
 #include <vector>
-#define WINDOWS_LEAN_AND_MEAN
-#include <windows.h>
+
+#if defined  _WIN32
+	#define WINDOWS_LEAN_AND_MEAN
+	#include <Windows.h>
+	#include <process.h>
+#else
+//TODO: Put Linux headers here
+#endif
 
 const int SPEED_TESTER_ALLOCATION_SIZE = 8*1024*1024; //In bytes
 enum TestErr {SUCCESSFUL, MEM_NOT_COMMITED};
@@ -39,8 +45,9 @@ bool bReportThreadExit = false;
 DWORD nWritten;
 CONSOLE_SCREEN_BUFFER_INFO sBufInfo;
 HANDLE hConsoleOut = GetStdHandle(STD_OUTPUT_HANDLE);
-bool GetFileVersion()
+bool PrintFileVersion()
 {
+#if defined _WIN32
 	DWORD  versioninfo_size;
 	void*  versioninfo;
 	UINT   cchLength;
@@ -79,10 +86,15 @@ bool GetFileVersion()
 	std::cout << file_version;
 	free(versioninfo);
 	return true;
+#else
+	//TODO: Linux code to get the version of exe file.
+#endif
+
 }
 
 BOOL IsWow64()
 {
+#if defined _WIN32
     BOOL bIsWow64 = FALSE;
 	LPFN_ISWOW64PROCESS fnIsWow64Process;
     fnIsWow64Process = (LPFN_ISWOW64PROCESS)GetProcAddress(
@@ -96,6 +108,9 @@ BOOL IsWow64()
         }
     }
     return bIsWow64;
+#else
+	//TODO: Linux code to find out if it is a WOW64 process
+#endif
 }
 
 DWORDLONG Initialize(DWORDLONG pageCount)
@@ -112,13 +127,20 @@ DWORDLONG Initialize(DWORDLONG pageCount)
 	std::cout << std::endl;
 #endif
 	std::cout << "\nSystem Information:\n";
+#if !defined _WIN32
+	//TODO: Define SYSTEM_INFO and  MEMORYSTATUSEX manually
+#endif
+
 	SYSTEM_INFO si;
-	GetSystemInfo(&si);
 	MEMORYSTATUSEX sMemoryStatus;	
 	sMemoryStatus.dwLength = sizeof(MEMORYSTATUSEX);
-	GlobalMemoryStatusEx(&sMemoryStatus);
 	DWORDLONG memSize;
-
+#if defined _WIN32
+	GlobalMemoryStatusEx(&sMemoryStatus);
+	GetSystemInfo(&si);
+#else
+//TODO: Linux code to fill the created structures
+#endif
 	std::cout << std::endl;
 	if(pageCount < 1) //Auto max mem finder
 	{
@@ -138,7 +160,7 @@ DWORDLONG Initialize(DWORDLONG pageCount)
 	std::cout << "Physical Memory In Use %: " << sMemoryStatus.dwMemoryLoad << std::endl;
 	std::cout << "Total Commitable Memory (MB): " << sMemoryStatus.ullTotalPageFile/ (1024*1024)<< std::endl;
 	std::cout << "Available Commitable Memory (MB): " << sMemoryStatus.ullAvailPageFile/ (1024*1024)<< std::endl;
-	std::cout << "Page Size (Bytes): " << si.dwPageSize << std::endl;
+	std::cout << "Page Size (Byte): " << si.dwPageSize << std::endl;
 	std::cout << "Allocation Granularity: " << si.dwAllocationGranularity << std::endl;
 	std::cout << std::endl;
 	std::cout << "Processor Architecture: ";
@@ -162,7 +184,7 @@ DWORDLONG Initialize(DWORDLONG pageCount)
 	std::cout << std::endl<< "PAE: ";
 	if(IsProcessorFeaturePresent(PF_PAE_ENABLED)) std::cout << "Enabled";
 	else std::cout << "Disabled";
-	
+#if defined _WIN32
 	std::cout << std::endl << "SSE2: ";
 	if(IsProcessorFeaturePresent(PF_XMMI64_INSTRUCTIONS_AVAILABLE)) std::cout << "Yes";
 	else std::cout <<"No";
@@ -174,7 +196,10 @@ DWORDLONG Initialize(DWORDLONG pageCount)
 	std::cout << std::endl << "Data Execution Prevention: ";
 	if(IsProcessorFeaturePresent(PF_NX_ENABLED)) std::cout << "Enabled";
 	else std::cout << "Disabled";
+#else
 
+	//TODO: Linux code to output the same info as windows (optional)
+#endif
 	std::cout << std::endl<< "Maximum Application Address: " << si.lpMaximumApplicationAddress<< std::endl;
 	std::cout <<"Minimum Application Address: " << si.lpMinimumApplicationAddress<<std::endl;
 	
@@ -187,6 +212,7 @@ DWORDLONG Initialize(DWORDLONG pageCount)
 
 DWORD WINAPI ReportProgress(LPVOID pUpdateInterval)
 {
+#if defined _WIN32
 	DWORDLONG updateInterval= *((DWORDLONG*) pUpdateInterval);
 	std::cout << "String Test Progress %:\nInteger Test Progress %:\nErrors:"; 
 
@@ -213,7 +239,9 @@ DWORD WINAPI ReportProgress(LPVOID pUpdateInterval)
 		posWrite.Y-=1;
 		Sleep(updateInterval ); ///100: ticks->ratio
 	}
-
+#else
+	//TODO: Linux way of outpuring data into std output
+#endif
 	return 0;
 }
 DWORD WINAPI Long64Test(LPVOID pMemSize)
@@ -299,8 +327,7 @@ DWORD WINAPI StrTest(LPVOID pMemSize)
 volatile int dummy;
 int MeasureSystemSpeed()
 {
-	GetConsoleScreenBufferInfo(hConsoleOut, &sBufInfo);
-	COORD posWrite = sBufInfo.dwCursorPosition;
+	
 	std::vector<int> tTime;
 	int *iTest = new int[SPEED_TESTER_ALLOCATION_SIZE/sizeof(int)]; //We have allocation size so we devide it by int size to see how many ints we need
 	for(int testNumber=0 ; testNumber<5;++testNumber)
@@ -325,14 +352,21 @@ int MeasureSystemSpeed()
 	}
 	delete[] iTest;
 	std::sort(tTime.begin(),tTime.end());
+#if defined _WIN32
+	GetConsoleScreenBufferInfo(hConsoleOut, &sBufInfo);
+	//COORD posWrite = sBufInfo.dwCursorPosition;
 	SetConsoleCursorPosition(hConsoleOut, sBufInfo.dwCursorPosition);
+#else
+	//TODO: Linux way of printing out
+#endif
+
 	return tTime[2]; //Middle number
 }
 
 int main(int argc, char* argv[])
 {
 	std::cout << "FSB Data Integrity Tester by SiavoshKC. V";
-	if(!GetFileVersion())
+	if(!PrintFileVersion())
 	{
 		std::cerr << "Getting file version has failed.\n";
 		return 1;
@@ -396,9 +430,10 @@ int main(int argc, char* argv[])
 	
 	nITERATIONS = UINT_MAX / ITERATION_DENOMINATOR;
 	DWORDLONG memSize = Initialize(pageCount);
+#if defined _WIN32
 	if(!SetProcessWorkingSetSize(GetCurrentProcess(), memSize*3, memSize*4))
 		std::cerr << "Unable to set working size. Using windows default instead.\n";
-
+#endif
 	std::cout << "Assessing system speed...";
 	int testResult = MeasureSystemSpeed();
 	std::cout << "Test routine took about " <<testResult <<" milliseconds."<< std::endl;
@@ -414,11 +449,13 @@ int main(int argc, char* argv[])
 	HANDLE hThread[2]; 
 	
 	std::cout << "Test Started...\n" ;
+#if defined _WIN32
 	hThread[0] = CreateThread(NULL, 0, StrTest, &memSize, 0, NULL);
 	hThread[1] = CreateThread(NULL, 0, Long64Test, &memSize, 0, NULL);
 	HANDLE hReportThread = CreateThread(NULL, 0, ReportProgress, &updateInterval, 0, NULL);
 
 	WaitForMultipleObjects(2, hThread, TRUE, INFINITE);
+
 	bReportThreadExit = true;
 	std::cout << std::endl; 
 	DWORD dwStrTestExitCode, dwULong64TestExitCode;
@@ -448,6 +485,9 @@ int main(int argc, char* argv[])
 	else return 1;
 
 	SetConsoleTextAttribute(hConsoleOut, FOREGROUND_GREEN|FOREGROUND_BLUE| FOREGROUND_RED);
+#else
+	//TODO: Linux way of creating and managing threads and showing the results
+#endif
 	return 0;
 }
 
